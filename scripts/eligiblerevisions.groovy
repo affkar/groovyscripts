@@ -1,110 +1,4 @@
-class BranchPairGenerator{
-
-    
-  def modulesAsString=''' '''
-   
-
-    Pair[] getBranchPairs(String branchName1, String branchName2){
-        def pairs=[]
-        for(module in modulesAsString.split("\n")){
-            pairs << ["${module}/branches/${branchName1}","${module}/branches/${branchName2}"]
-        }
-        return pairs;
-    }    
-
-}
-
-class Pair{
-    def branch1, branch2;
-    Pair(def branch3, def branch4){
-        this.branch1=branch3
-        this.branch2=branch4
-    }
-    
-    String toString(){
-        [branch1, branch2].toString()
-    }
-}
-
-
-
-
-class MergeInfoEligible{
-
-    def branch1, branch2;
-    
-    MergeInfoEligible(def branch1, def branch2){
-        this.branch1=branch1
-        this.branch2=branch2
-    }
-    
-    MergeInfoEligible(Pair pair){
-        this.branch1=pair.branch1
-        this.branch2=pair.branch2
-        println branch1
-        println branch2
-    }
-    
-    boolean allMerged(){
-        return revisionsEligibleToMerge().length()==0
-    }
-    
-    boolean allReverseMerged(){
-        return revisionsEligibleToReverseMerge().length()==0
-    }
-    
-    String[] revisionsEligibleToMerge(){
-        def revisionsEligibleToMerge=[]
-        List<String> command = new ArrayList<String>();
-        command.add("svn");
-        command.add("mergeinfo");
-        command.add("--show-revs");
-        command.add("eligible");
-        command.add(branch1);
-        command.add(branch2);
-        
-        // execute my command
-        SystemCommandExecutor commandExecutor = new SystemCommandExecutor(command);
-        int result = commandExecutor.executeCommand();
-        
-        // get the output from the command
-        StringBuilder stdout = commandExecutor.getStandardOutputFromCommand();
-        StringBuilder stderr = commandExecutor.getStandardErrorFromCommand();
-        
-        // print the output from the command
-        if(stderr.toString()!=null && stderr.toString() !=""){
-            throw new Exception("${stderr.toString()} when trying to execute ${command.toString()}");
-        }
-        def revs=stdout.toString().split("\n");
-        for(rev in revs){
-            // execute my command
-            List<String> command2=["svn","log","-r",rev, branch1]
-            SystemCommandExecutor commandExecutor2 = new SystemCommandExecutor(command2);
-            int result2 = commandExecutor2.executeCommand();
-            
-            // get the output from the command
-            StringBuilder stdout2 = commandExecutor2.getStandardOutputFromCommand();
-            StringBuilder stderr2 = commandExecutor2.getStandardErrorFromCommand();
-            
-            if(stderr2.toString()!=null && stderr2.toString() !=""){
-                throw new Exception("${stderr2.toString()} when trying to execute ${command2.toString()}");
-            }
-            
-            if(!(stdout2.toString() =~ /\| jenkins \|/)){
-                revisionsEligibleToMerge << rev
-            }
-            
-        }
-        return revisionsEligibleToMerge
-    }
-
-    String[] revisionsEligibleToReverseMerge(){
-        return new MergeInfoEligible(branch2, branch1).revisionsEligibleToMerge()
-    }
-
-    
-}
-
+import java.util.regex.Matcher;
 public class SystemCommandExecutor
 {
   private List<String> commandInformation;
@@ -318,4 +212,188 @@ class ThreadedStreamHandler extends Thread
   }
 
 }
-print new MergeInfoEligible(new Pair("branchurl1", "branchurl2")).revisionsEligibleToMerge();
+
+class BranchPairGenerator{
+
+    
+def modulesAsString=''''''
+   
+
+    List<Pair> getBranchPairs(String branchName1, String branchName2){
+        List<Pair> pairs=[]
+		//int i=0
+        for(module in modulesAsString.split("\n")){
+            pairs << new Pair("${module}/branches/${branchName1}","${module}/branches/${branchName2}")
+			//i++
+        }
+        return pairs;
+    }    
+
+}
+
+class Pair{
+    def branch1, branch2;
+    Pair(def branch1, def branch2){
+        this.branch1=branch1
+        this.branch2=branch2
+    }
+    
+    String toString(){
+        return "new Pair('$branch1', '$branch2')"
+    }
+	
+	boolean equals(def obj){
+		branch1==obj.branch1 && branch2==obj.branch2
+	}
+}
+
+
+
+
+class MergeInfoEligible{
+
+    def branch1, branch2;
+    def revisionsEligibleToMerge=[]
+	def revisionsEligibleToReverseMerge=[]
+	
+    MergeInfoEligible(def branch1, def branch2){
+        this.branch1=branch1
+        this.branch2=branch2
+    }
+    
+    MergeInfoEligible(Pair pair){
+        this.branch1=pair.branch1
+        this.branch2=pair.branch2
+    }
+	
+	boolean equals(def obj){
+		branch1==obj.branch1 && branch2==obj.branch2
+	}
+    
+    boolean allMerged(){
+        return revisionsEligibleToMerge.length()==0
+    }
+    
+    boolean allReverseMerged(){
+        return revisionsEligibleToReverseMerge.length()==0
+    }
+	
+	String printRevisionsEligibleToMerge(){
+		revisionsEligibleToMerge()
+		def cloneRevs=revisionsEligibleToMerge.clone();
+		while(cloneRevs.size()>0){
+			List<String> command2=["svn","log", branch1, "-v"]
+			for (rev in cloneRevs.take(25)){
+				command2 << "-r"
+				command2 << rev
+			}
+			SystemCommandExecutor commandExecutor2 = new SystemCommandExecutor(command2);
+			//println "Command to be executed is ${command2.join(" ")}"
+			int result2 = commandExecutor2.executeCommand();
+			
+			// get the output from the command
+			StringBuilder stdout2 = commandExecutor2.getStandardOutputFromCommand();
+			StringBuilder stderr2 = commandExecutor2.getStandardErrorFromCommand();
+			
+			if(stderr2.toString()!=null && stderr2.toString() !=""){
+				throw new Exception("${stderr2.toString()} when trying to execute ${command2.toString()}");
+			}
+			println stdout2.toString()
+			cloneRevs=cloneRevs.drop(25)
+		}
+		List<String> command2=["svn","merge", branch1 ]
+		revisionsEligibleToMerge.each{
+			command2 << '-c'
+			command2 << it
+		}
+		if(revisionsEligibleToMerge.size()>0){
+			println "SVN Command to merge : ${command2.join(" ")}"
+		}
+	}
+    
+    String[] revisionsEligibleToMerge(){
+        List<String> command = new ArrayList<String>();
+        command.add("svn");
+        command.add("mergeinfo");
+        command.add("--show-revs");
+        command.add("eligible");
+        command.add(branch1);
+        command.add(branch2);
+        
+		println "Command to be executed is ${command.join(" ")}"
+		
+        // execute my command
+        SystemCommandExecutor commandExecutor = new SystemCommandExecutor(command);
+        int result = commandExecutor.executeCommand();
+        
+        // get the output from the command
+        StringBuilder stdout = commandExecutor.getStandardOutputFromCommand();
+        StringBuilder stderr = commandExecutor.getStandardErrorFromCommand();
+        
+        // print the output from the command
+        if(stderr.toString()!=null && stderr.toString() !=""){
+            throw new Exception("${stderr.toString()} when trying to execute ${command.toString()}");
+        }
+		//println """Received stdout as ..${stdout}. Parsing now"""
+        def revs=stdout.toString().split("\n");
+		while(revs.size()>0){
+			List<String> command2=["svn","log", branch1]
+			for(rev in revs.take(25)){
+				// execute my command
+				command2 << "-r"
+				command2 << rev
+			}
+			
+			SystemCommandExecutor commandExecutor2 = new SystemCommandExecutor(command2);
+			
+			//println "Command to be executed is ${command2.join(" ")}"
+			int result2 = commandExecutor2.executeCommand();
+			
+			// get the output from the command
+			StringBuilder stdout2 = commandExecutor2.getStandardOutputFromCommand();
+			StringBuilder stderr2 = commandExecutor2.getStandardErrorFromCommand();
+			
+			if(stderr2.toString()!=null && stderr2.toString() !=""){
+				throw new Exception("${stderr2.toString()} when trying to execute ${command2.toString()}");
+			}
+			def line=stdout2.toString().split("\n");
+			
+			line.each{
+				//println "output $it\n"
+				if(it =~ /^(r\d*) \| (\w*) \|/){
+					Matcher matcher=(it =~ /^(r\d*) \| (\w*) \|/)
+					if( matcher.hasGroup() && matcher[0][2] != 'jenkins'){
+						//println "matcher[0] ${matcher[0]}"
+						revisionsEligibleToMerge << matcher[0][1]
+					}
+				}
+			}
+			
+			revs=revs.drop(25)
+		}
+        return revisionsEligibleToMerge
+    }
+	
+	void printMatches(def lines){
+		lines.each{
+					println "output $it\n"
+					if(it =~ /^(r\d*) \| (\w*) \|/){
+						println "If block"
+						Matcher matcher=(it =~ /^(r\d*) \| (\w*) \|/)
+						if( matcher.hasGroup() && matcher[0][2] != 'jenkins'){
+							println "matcher[0] ${matcher[0][1]}"
+							//revisionsEligibleToMerge << matcher[0][1]
+						}
+					}else{
+						println "Else Block"
+					}
+				}
+	}
+
+    String[] revisionsEligibleToReverseMerge(){
+        return revisionsEligibleToReverseMerge = new MergeInfoEligible(branch2, branch1).revisionsEligibleToMerge()
+    }
+
+    
+}
+
